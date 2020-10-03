@@ -1,0 +1,24 @@
+[[bin]]
+name = "array-vec"
+path = "fuzz_targets/array_vec.rs"
+test = false
+doc = false
+
+[dependencies]
+arbitrary = { features = ["derive"], version = "0.4" }
+libfuzzer-sys = "0.3"
+stack-based-vec = { path = ".." }
+
+[package]
+name = "stack-based-vec-fuzz"
+version = "0.0.0"
+authors = ["Automatically generated"]
+publish = false
+edition = "2018"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+members = ["."]
+

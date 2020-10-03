@@ -1,1 +1,5 @@
+artifacts
+benchmarks/Cargo.lock
+corpus
+fuzz/Cargo.lock
 target
