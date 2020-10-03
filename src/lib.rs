@@ -1,15 +1,12 @@
-#![feature(min_const_generics)]
+#![feature(min_const_generics, slice_partition_dedup)]
 
-mod array_vec_error;
-
-pub use array_vec_error::ArrayVecError;
 use core::{
     borrow::{Borrow, BorrowMut},
     cmp::Ordering,
     fmt,
     iter::IntoIterator,
     mem::MaybeUninit,
-    ops::{Deref, DerefMut, Index, IndexMut, RangeBounds},
+    ops::{Bound, Deref, DerefMut, Index, IndexMut, RangeBounds},
     ptr,
     slice::{self, Iter, IterMut, SliceIndex},
 };
@@ -22,13 +19,45 @@ pub struct ArrayVec<T, const N: usize> {
 impl<T, const N: usize> ArrayVec<T, N> {
     // Constructors
 
-    pub unsafe fn from_raw_parts(_ptr: *mut T, _len: usize) -> Self {
-        todo!()
-    }
-
+    /// * Example
+    ///
     /// ```rust
     /// use stack_based_vec::ArrayVec;
-    /// let _: ArrayVec<i32, 2> = ArrayVec::new();
+    ///
+    /// let v: ArrayVec<i32, 2> = ArrayVec::from_array([1, 2]);
+    /// assert_eq!(v.len(), 2);
+    /// ```
+    #[inline]
+    pub fn from_array(array: [T; N]) -> Self {
+        Self {
+            len: array.len(),
+            data: MaybeUninit::new(array),
+        }
+    }
+
+    /// * Example
+    ///
+    /// ```rust
+    /// use stack_based_vec::ArrayVec;
+    ///
+    /// let v: ArrayVec<i32, 2> = ArrayVec::from_array_and_len([1, 2], 1);
+    /// assert_eq!(v.len(), 1);
+    /// ```
+    #[inline]
+    pub fn from_array_and_len(array: [T; N], len: usize) -> Self {
+        Self {
+            len: len.min(array.len()),
+            data: MaybeUninit::new(array),
+        }
+    }
+
+    /// * Example
+    ///
+    /// ```rust
+    /// use stack_based_vec::ArrayVec;
+    ///
+    /// let v: ArrayVec<i32, 2> = ArrayVec::new();
+    /// assert_eq!(v.len(), 0);
     /// ```
     #[inline]
     pub const fn new() -> Self {
@@ -40,32 +69,72 @@ impl<T, const N: usize> ArrayVec<T, N> {
 
     // Methods
 
+    /// * Example
+    ///
+    /// ```rust
+    /// use stack_based_vec::ArrayVec;
+    ///
+    /// let mut v: ArrayVec<usize, 2> = ArrayVec::from_array([1, 2]);
+    /// let ptr = v.as_mut_ptr();
+    ///
+    /// unsafe {
+    ///     for i in 0..v.len() {
+    ///         *ptr.add(i) = i;
+    ///     }
+    /// }
+    ///
+    /// assert_eq!(v.as_slice(), &[0, 1]);
+    /// ```
     #[inline]
     pub fn as_mut_ptr(&mut self) -> *mut T {
         self.data.as_mut_ptr() as *mut _
     }
 
+    /// * Example
+    ///
+    /// ```rust
+    /// use stack_based_vec::ArrayVec;
+    /// let mut v: ArrayVec<usize, 2> = ArrayVec::from_array([1, 2]);
+    /// assert_eq!(v.as_mut_slice(), &mut [1, 2]);
+    /// ```
     #[inline]
     pub fn as_mut_slice(&mut self) -> &mut [T] {
         unsafe { slice::from_raw_parts_mut(self.as_mut_ptr(), self.len()) }
     }
 
+    /// * Example
+    ///
+    /// ```rust
+    /// use stack_based_vec::ArrayVec;
+    ///
+    /// let v: ArrayVec<usize, 2> = ArrayVec::from_array([1, 2]);
+    /// let ptr = v.as_ptr();
+    ///
+    /// unsafe {
+    ///     for i in 0..v.len() {
+    ///         assert_eq!(*ptr.add(i), i.saturating_add(1));
+    ///     }
+    /// }
+    /// ```
     #[inline]
     pub fn as_ptr(&self) -> *const T {
         self.data.as_ptr() as *const _
     }
 
+    /// * Example
+    ///
     /// ```rust
     /// use stack_based_vec::ArrayVec;
-    /// let mut v: ArrayVec<i32, 2> = ArrayVec::new();
-    /// v.push(1);
-    /// assert_eq!(v.as_slice(), &[1]);
+    /// let mut v: ArrayVec<usize, 2> = ArrayVec::from_array([1, 2]);
+    /// assert_eq!(v.as_slice(), &[1, 2]);
     /// ```
     #[inline]
     pub fn as_slice(&self) -> &[T] {
         unsafe { slice::from_raw_parts(self.as_ptr(), self.len()) }
     }
 
+    /// * Example
+    ///
     /// ```rust
     /// use stack_based_vec::ArrayVec;
     /// let v: ArrayVec<i32, 2> = ArrayVec::new();
@@ -76,55 +145,191 @@ impl<T, const N: usize> ArrayVec<T, N> {
         N
     }
 
+    /// * Example
+    ///
+    /// ```rust
+    /// use stack_based_vec::ArrayVec;
+    /// let mut v: ArrayVec<i32, 2> = ArrayVec::from_array([1, 2]);
+    /// v.clear();
+    /// assert_eq!(v.len(), 0);
+    /// ```
     #[inline]
     pub fn clear(&mut self) {
-        self.truncate(0);
+        self.truncate(0)
     }
 
-    pub fn dedup(&mut self) {
-        todo!()
+    /// * Example
+    ///
+    /// ```rust
+    /// use stack_based_vec::ArrayVec;
+    /// let mut v: ArrayVec<i32, 5> = ArrayVec::from_array([1, 2, 2, 3, 2]);
+    /// v.dedup();
+    /// assert_eq!(v.as_slice(), &[1, 2, 3, 2]);
+    /// ```
+    pub fn dedup(&mut self)
+    where
+        T: PartialEq,
+    {
+        self.dedup_by(|a, b| a == b)
     }
 
-    pub fn dedup_by<F>(&mut self, _same_bucket: F)
+    /// * Example
+    ///
+    /// ```rust
+    /// use stack_based_vec::ArrayVec;
+    /// let mut v: ArrayVec<i32, 5> = ArrayVec::from_array([10, 20, 21, 30, 20]);
+    /// v.dedup_by_key(|i| *i / 10);
+    /// assert_eq!(v.as_slice(), &[10, 20, 30, 20]);
+    /// ```
+    pub fn dedup_by<F>(&mut self, same_bucket: F)
     where
         F: FnMut(&mut T, &mut T) -> bool,
     {
-        todo!()
+        let len = {
+            let (dedup, _) = self.as_mut_slice().partition_dedup_by(same_bucket);
+            dedup.len()
+        };
+        self.truncate(len);
     }
 
-    pub fn dedup_by_key<F, K>(&mut self, _key: F)
+    /// * Example
+    ///
+    /// ```rust
+    /// use stack_based_vec::ArrayVec;
+    /// let mut v: ArrayVec<i32, 5> = ArrayVec::from_array([1, 2, 3, 4, 5]);
+    /// let keep = [false, true, true, false, true];
+    /// let mut i = 0;
+    /// v.retain(|_| (keep[i], i += 1).0);
+    /// assert_eq!(v.as_slice(), &[2, 3, 5]);
+    /// ```
+    pub fn dedup_by_key<F, K>(&mut self, mut key: F)
     where
         F: FnMut(&mut T) -> K,
         K: PartialEq<K>,
     {
-        todo!()
+        self.dedup_by(|a, b| key(a) == key(b))
     }
 
-    pub fn drain<R>(&mut self, _range: R)
+    pub fn drain<R>(&mut self, range: R) -> Option<()>
     where
         R: RangeBounds<usize>,
     {
+        let len = self.len();
+        let start = match range.start_bound() {
+            Bound::Included(&n) => n,
+            Bound::Excluded(&n) => n + 1,
+            Bound::Unbounded => 0,
+        };
+        let end = match range.end_bound() {
+            Bound::Included(&n) => n + 1,
+            Bound::Excluded(&n) => n,
+            Bound::Unbounded => len,
+        };
+
+        if start > end || end > len {
+            return None;
+        }
+
         todo!()
     }
 
-    pub fn extend_from_cloneable_slice(&mut self, _other: &[T])
+    /// * Examples
+    ///
+    /// ```rust
+    /// use stack_based_vec::ArrayVec;
+    /// let mut v: ArrayVec<i32, 2> = ArrayVec::new();
+    /// assert!(v.extend_from_cloneable_slice(&[1, 2]).is_ok());
+    /// assert_eq!(v.as_slice(), &[1, 2]);
+    /// ```
+    ///
+    /// ```rust
+    /// use stack_based_vec::ArrayVec;
+    /// let mut v: ArrayVec<i32, 2> = ArrayVec::new();
+    /// assert_eq!(v.extend_from_cloneable_slice(&[1, 2, 3]).unwrap_err(), &[3]);
+    /// assert_eq!(v.as_slice(), &[1, 2]);
+    /// ```
+    pub fn extend_from_cloneable_slice<'a>(&mut self, other: &'a [T]) -> Result<(), &'a [T]>
     where
         T: Clone,
     {
-        todo!()
+        let remaining_capacity = self.remaining_capacity();
+        let mut f = |len| {
+            for element in other[..len].iter().cloned() {
+                let _ = self.push(element);
+            }
+        };
+        if other.len() > remaining_capacity {
+            f(remaining_capacity);
+            Err(&other[remaining_capacity..])
+        } else {
+            f(other.len());
+            Ok(())
+        }
     }
 
-    pub fn extend_from_copyable_slice(&mut self, _other: &[T])
+    /// * Examples
+    ///
+    /// ```rust
+    /// use stack_based_vec::ArrayVec;
+    /// let mut v: ArrayVec<i32, 2> = ArrayVec::new();
+    /// assert!(v.extend_from_copyable_slice(&[1, 2]).is_ok());
+    /// assert_eq!(v.as_slice(), &[1, 2]);
+    /// ```
+    ///
+    /// ```rust
+    /// use stack_based_vec::ArrayVec;
+    /// let mut v: ArrayVec<i32, 2> = ArrayVec::new();
+    /// assert_eq!(v.extend_from_copyable_slice(&[1, 2, 3]).unwrap_err(), &[3]);
+    /// assert_eq!(v.as_slice(), &[1, 2]);
+    /// ```
+    pub fn extend_from_copyable_slice<'a>(&mut self, other: &'a [T]) -> Result<(), &'a [T]>
     where
         T: Copy,
     {
-        todo!()
+        let remaining_capacity = self.remaining_capacity();
+        let mut f = |len| unsafe {
+            let dst = self.as_mut_ptr().add(self.len());
+            ptr::copy_nonoverlapping(other.as_ptr(), dst, len);
+            self.increase_len(len);
+        };
+        if other.len() > remaining_capacity {
+            f(remaining_capacity);
+            Err(&other[remaining_capacity..])
+        } else {
+            f(other.len());
+            Ok(())
+        }
     }
 
-    pub fn insert(&mut self, _idx: usize, _element: T) {
-        todo!()
+    /// * Example
+    ///
+    /// ```rust
+    /// use stack_based_vec::ArrayVec;
+    /// let mut v: ArrayVec<i32, 2> = ArrayVec::new();
+    /// let _ = v.push(2);
+    /// // Index is out of bounds
+    /// assert!(v.insert(10, 4).is_err());
+    /// // Ok
+    /// assert!(v.insert(0, 4).is_ok());
+    /// assert_eq!(v.len(), 2);
+    /// // Full capacity
+    /// assert!(v.insert(0, 6).is_err());
+    /// ```
+    pub fn insert(&mut self, idx: usize, element: T) -> Result<(), T> {
+        if idx > self.len() || self.remaining_capacity() == 0 {
+            return Err(element);
+        }
+        unsafe {
+            let ptr: *mut _ = self.as_mut_ptr().add(idx);
+            ptr::copy(ptr, ptr.add(1), self.len().saturating_sub(idx));
+            ptr::write(ptr, element);
+        }
+        self.increase_len(1);
+        Ok(())
     }
 
+    /// * Example
+    ///
     /// ```rust
     /// use stack_based_vec::ArrayVec;
     /// let mut v: ArrayVec<i32, 2> = ArrayVec::new();
@@ -137,6 +342,8 @@ impl<T, const N: usize> ArrayVec<T, N> {
         self.len == 0
     }
 
+    /// * Example
+    ///
     /// ```rust
     /// use stack_based_vec::ArrayVec;
     /// let v: ArrayVec<i32, 2> = ArrayVec::new();
@@ -147,28 +354,100 @@ impl<T, const N: usize> ArrayVec<T, N> {
         self.len
     }
 
+    /// # Example
+    ///
+    /// ```rust
+    /// use stack_based_vec::ArrayVec;
+    /// let mut v: ArrayVec<i32, 3> = ArrayVec::from_array([1, 2, 3]);
+    /// assert_eq!(v.pop().unwrap(), 3);
+    /// assert_eq!(v.as_slice(), &[1, 2]);
+    /// ```
     pub fn pop(&mut self) -> Option<T> {
-        todo!()
+        if self.len == 0 {
+            None
+        } else {
+            unsafe {
+                self.decrease_len(1);
+                Some(ptr::read(self.as_ptr().add(self.len())))
+            }
+        }
     }
 
-    pub fn push(&mut self, element: T) {
-        self.try_push(element).unwrap()
+    /// * Example
+    ///
+    /// ```rust
+    /// use stack_based_vec::ArrayVec;
+    /// let mut v: ArrayVec<i32, 2> = ArrayVec::new();
+    /// assert!(v.push(1).is_ok());
+    /// assert_eq!(v[0], 1);
+    /// assert!(v.push(2).is_ok());
+    /// assert_eq!(v[1], 2);
+    /// assert!(v.push(3).is_err());
+    /// ```
+    #[inline]
+    pub fn push(&mut self, element: T) -> Result<(), T> {
+        if self.len >= N {
+            return Err(element);
+        }
+        unsafe {
+            ptr::write(self.as_mut_ptr().add(self.len), element);
+        }
+        self.increase_len(1);
+        Ok(())
     }
 
-    pub fn remove(&mut self, _idx: usize) -> T {
-        todo!()
+    /// # Example
+    ///
+    /// ```rust
+    /// use stack_based_vec::ArrayVec;
+    /// let mut v: ArrayVec<i32, 3> = ArrayVec::from_array([1, 2, 3]);
+    /// assert!(v.remove(10).is_none());
+    /// assert_eq!(v.remove(0).unwrap(), 1);
+    /// assert_eq!(v.as_slice(), &[2, 3]);
+    /// ```
+    pub fn remove(&mut self, idx: usize) -> Option<T> {
+        let len = self.len();
+        if idx >= len {
+            return None;
+        }
+        unsafe {
+            let ptr = self.as_mut_ptr().add(idx);
+            let ret = ptr::read(ptr);
+            ptr::copy(ptr.offset(1), ptr, len - idx - 1);
+            self.decrease_len(1);
+            Some(ret)
+        }
     }
 
-    pub fn retain<F>(&mut self, _f: F)
+    /// # Example
+    ///
+    /// ```rust
+    /// use stack_based_vec::ArrayVec;
+    /// let mut v: ArrayVec<i32, 5> = ArrayVec::from_array([1, 2, 3, 4, 5]);
+    /// let keep = [false, true, true, false, true];
+    /// let mut i = 0;
+    /// v.retain(|_| (keep[i], i += 1).0);
+    /// assert_eq!(v.as_slice(), &[2, 3, 5]);
+    /// ```
+    pub fn retain<F>(&mut self, mut f: F)
     where
         F: FnMut(&mut T) -> bool,
     {
-        todo!()
-    }
-
-    #[inline]
-    pub unsafe fn set_len(&mut self, len: usize) {
-        self.len = len;
+        let len = self.len();
+        let mut del = 0;
+        {
+            let v = &mut **self;
+            for i in 0..len {
+                if !f(&mut v[i]) {
+                    del += 1;
+                } else if del > 0 {
+                    v.swap(i - del, i);
+                }
+            }
+        }
+        if del > 0 {
+            self.truncate(len - del);
+        }
     }
 
     pub fn splice<R, I>(&mut self, _range: R, _replace_with: I)
@@ -179,57 +458,82 @@ impl<T, const N: usize> ArrayVec<T, N> {
         todo!()
     }
 
-    pub fn split_off(&mut self, _at: usize) -> Self {
-        todo!()
+    /// # Example
+    ///
+    /// ```rust
+    /// use stack_based_vec::ArrayVec;
+    /// let mut v: ArrayVec<i32, 3> = ArrayVec::from_array([1, 2, 3]);
+    /// let v2 = v.split_off(1).unwrap();
+    /// assert_eq!(v.as_slice(), &[1]);
+    /// assert_eq!(v2.as_slice(), &[2, 3]);
+    /// ```
+    pub fn split_off(&mut self, at: usize) -> Option<Self> {
+        let len = self.len();
+        if at > len {
+            return None;
+        }
+        let mut other = Self::new();
+        unsafe {
+            self.len = at;
+            other.len = len - at;
+            ptr::copy_nonoverlapping(self.as_ptr().add(at), other.as_mut_ptr(), other.len());
+        }
+        Some(other)
     }
 
-    pub fn swap_remove(&mut self, _idx: usize) -> T {
-        todo!()
+    /// # Example
+    ///
+    /// ```rust
+    /// use stack_based_vec::ArrayVec;
+    /// let mut v: ArrayVec<i32, 2> = ArrayVec::from_array([1, 2]);
+    /// assert!(v.swap_remove(10).is_none());
+    /// assert_eq!(v.swap_remove(0).unwrap(), 1);
+    /// assert_eq!(v.get(0).unwrap(), &2);
+    /// assert_eq!(v.len(), 1);
+    /// ```
+    pub fn swap_remove(&mut self, idx: usize) -> Option<T> {
+        let len = self.len();
+        if idx >= len {
+            return None;
+        }
+        unsafe {
+            let last = ptr::read(self.as_ptr().add(len - 1));
+            let hole = self.as_mut_ptr().add(idx);
+            self.decrease_len(1);
+            Some(ptr::replace(hole, last))
+        }
+    }
+
+    /// * Example
+    ///
+    /// ```rust
+    /// use stack_based_vec::ArrayVec;
+    /// let mut v: ArrayVec<i32, 2> = ArrayVec::from_array([1, 2]);
+    /// v.truncate(1);
+    /// assert_eq!(v.len(), 1);
+    /// ```
+    pub fn truncate(&mut self, len: usize) {
+        unsafe {
+            if len < self.len() {
+                ptr::drop_in_place(&mut self[len..]);
+                self.len = len;
+            }
+        }
     }
 
     #[inline]
-    pub fn truncate(&mut self, len: usize) {
-        if len < self.len {
-            self.len = len;
-        }
+    fn decrease_len(&mut self, n: usize) {
+        self.len = self.len.saturating_sub(n);
     }
 
-    pub fn try_extend_from_cloneable_slice(&mut self, _other: &[T]) -> Result<(), ArrayVecError>
-    where
-        T: Clone,
-    {
-        todo!()
+    #[inline]
+    fn increase_len(&mut self, n: usize) {
+        self.len = self.len.saturating_add(n);
     }
 
-    pub fn try_extend_from_copyable_slice(&mut self, _other: &[T]) -> Result<(), ArrayVecError>
-    where
-        T: Copy,
-    {
-        todo!()
-    }
-
-    pub fn try_insert(&mut self, _idx: usize, _element: T) -> Result<(), ArrayVecError> {
-        todo!()
-    }
-
-    /// ```rust
-    /// use stack_based_vec::ArrayVec;
-    /// let mut v: ArrayVec<i32, 2> = ArrayVec::new();
-    /// assert!(v.try_push(1).is_ok());
-    /// assert_eq!(v[0], 1);
-    /// assert!(v.try_push(2).is_ok());
-    /// assert_eq!(v[1], 2);
-    /// assert!(v.try_push(3).is_err());
-    /// ```
-    pub fn try_push(&mut self, element: T) -> Result<(), ArrayVecError> {
-        if self.len >= N {
-            return Err(ArrayVecError::CapacityOverflow);
-        }
-        unsafe {
-            ptr::write(self.as_mut_ptr().add(self.len), element);
-        }
-        self.len += 1;
-        Ok(())
+    #[inline]
+    const fn remaining_capacity(&self) -> usize {
+        self.capacity().saturating_sub(self.len())
     }
 }
 
@@ -261,6 +565,19 @@ impl<T, const N: usize> BorrowMut<[T]> for ArrayVec<T, N> {
     }
 }
 
+impl<T, const N: usize> Clone for ArrayVec<T, N>
+where
+    T: Clone,
+{
+    fn clone(&self) -> Self {
+        let mut v = Self::new();
+        let _ = v.extend_from_cloneable_slice(self.as_slice());
+        v
+    }
+}
+
+impl<T, const N: usize> Copy for ArrayVec<T, N> where T: Copy {}
+
 impl<T, const N: usize> Default for ArrayVec<T, N>
 where
     T: Default,
@@ -288,13 +605,29 @@ impl<T, const N: usize> DerefMut for ArrayVec<T, N> {
 
 impl<T, const N: usize> Eq for ArrayVec<T, N> where T: Eq {}
 
+impl<T, const N: usize> Extend<T> for ArrayVec<T, N> {
+    fn extend<I>(&mut self, iter: I)
+    where
+        I: IntoIterator<Item = T>,
+    {
+        let remaining_capacity = self.remaining_capacity();
+        for element in iter.into_iter().take(remaining_capacity) {
+            let _ = self.push(element);
+        }
+    }
+}
+
 impl<T, const N: usize> From<[T; N]> for ArrayVec<T, N> {
     #[inline]
     fn from(from: [T; N]) -> Self {
-        Self {
-            len: from.len(),
-            data: MaybeUninit::new(from),
-        }
+        Self::from_array(from)
+    }
+}
+
+impl<T, const N: usize> From<([T; N], usize)> for ArrayVec<T, N> {
+    #[inline]
+    fn from(from: ([T; N], usize)) -> Self {
+        Self::from_array_and_len(from.0, from.1)
     }
 }
 
@@ -321,8 +654,8 @@ where
 }
 
 impl<'a, T, const N: usize> IntoIterator for &'a ArrayVec<T, N> {
-    type Item = &'a T;
     type IntoIter = Iter<'a, T>;
+    type Item = &'a T;
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
