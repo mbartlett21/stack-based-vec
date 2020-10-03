@@ -1,0 +1,18 @@
+[[bench]]
+harness = false
+name = "array-vec"
+path = "array_vec.rs"
+
+[dev-dependencies]
+criterion = "0.3"
+stack-based-vec = { path = ".." }
+
+[package]
+name = "stack-based-vec-benches"
+version = "0.0.0"
+authors = ["Automatically generated"]
+publish = false
+edition = "2018"
+
+[workspace]
+members = ["."]
