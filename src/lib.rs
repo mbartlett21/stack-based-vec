@@ -1,4 +1,12 @@
-#![feature(min_const_generics, slice_partition_dedup)]
+#![feature(
+    exact_size_is_empty,
+    min_const_generics,
+    slice_partition_dedup,
+    trusted_len
+)]
+
+mod drain;
+mod splice;
 
 use core::{
     borrow::{Borrow, BorrowMut},
@@ -7,9 +15,10 @@ use core::{
     iter::IntoIterator,
     mem::MaybeUninit,
     ops::{Bound, Deref, DerefMut, Index, IndexMut, RangeBounds},
-    ptr,
+    ptr::{self, NonNull},
     slice::{self, Iter, IterMut, SliceIndex},
 };
+pub use {drain::Drain, splice::Splice};
 
 pub struct ArrayVec<T, const N: usize> {
     data: MaybeUninit<[T; N]>,
@@ -210,7 +219,21 @@ impl<T, const N: usize> ArrayVec<T, N> {
         self.dedup_by(|a, b| key(a) == key(b))
     }
 
-    pub fn drain<R>(&mut self, range: R) -> Option<()>
+    /// * Example
+    ///
+    /// ```rust
+    /// use stack_based_vec::ArrayVec;
+    /// let mut v: ArrayVec<i32, 3> = ArrayVec::from_array([1, 2, 3]);
+    /// {
+    ///     let mut iter = v.drain(1..).unwrap();
+    ///     assert_eq!(iter.next().unwrap(), 2);
+    ///     assert_eq!(iter.next().unwrap(), 3);
+    /// }
+    /// assert_eq!(v.as_slice(), &[1]);
+    /// v.drain(..);
+    /// assert_eq!(v.as_slice(), &[]);
+    /// ```
+    pub fn drain<R>(&mut self, range: R) -> Option<Drain<'_, T, N>>
     where
         R: RangeBounds<usize>,
     {
@@ -230,7 +253,19 @@ impl<T, const N: usize> ArrayVec<T, N> {
             return None;
         }
 
-        todo!()
+        unsafe {
+            // set self.vec length's to start, to be safe in case Drain is leaked
+            self.len = start;
+            // Use the borrow in the IterMut to indicate borrowing behavior of the
+            // whole Drain iterator (like &mut T).
+            let range_slice = slice::from_raw_parts_mut(self.as_mut_ptr().add(start), end - start);
+            Some(Drain {
+                tail_start: end,
+                tail_len: len - end,
+                iter: range_slice.iter(),
+                vec: NonNull::from(self),
+            })
+        }
     }
 
     /// * Examples
@@ -450,12 +485,28 @@ impl<T, const N: usize> ArrayVec<T, N> {
         }
     }
 
-    pub fn splice<R, I>(&mut self, _range: R, _replace_with: I)
+    /// # Example
+    ///
+    /// ```rust
+    /// use stack_based_vec::ArrayVec;
+    /// let mut v: ArrayVec<i32, 3> = ArrayVec::from_array([1, 2, 3]);
+    /// {
+    ///     let mut iter = v.splice(..2, [7, 8].iter().copied()).unwrap();
+    ///     assert_eq!(iter.next().unwrap(), 1);
+    ///     assert_eq!(iter.next().unwrap(), 2);
+    /// }
+    /// assert_eq!(v.as_slice(), &[7, 8, 3]);
+    /// ```
+    #[inline]
+    pub fn splice<I, R>(&mut self, range: R, replace_with: I) -> Option<Splice<'_, I::IntoIter, N>>
     where
         I: IntoIterator<Item = T>,
         R: RangeBounds<usize>,
     {
-        todo!()
+        Some(Splice {
+            drain: self.drain(range)?,
+            replace_with: replace_with.into_iter(),
+        })
     }
 
     /// # Example
