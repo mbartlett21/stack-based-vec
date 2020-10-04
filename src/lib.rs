@@ -6,6 +6,7 @@
 )]
 
 mod drain;
+mod macros;
 mod splice;
 
 use core::{
@@ -28,7 +29,7 @@ pub struct ArrayVec<T, const N: usize> {
 impl<T, const N: usize> ArrayVec<T, N> {
     // Constructors
 
-    /// * Example
+    /// # Example
     ///
     /// ```rust
     /// use stack_based_vec::ArrayVec;
@@ -44,7 +45,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
         }
     }
 
-    /// * Example
+    /// # Example
     ///
     /// ```rust
     /// use stack_based_vec::ArrayVec;
@@ -60,7 +61,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
         }
     }
 
-    /// * Example
+    /// # Example
     ///
     /// ```rust
     /// use stack_based_vec::ArrayVec;
@@ -78,7 +79,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
 
     // Methods
 
-    /// * Example
+    /// # Example
     ///
     /// ```rust
     /// use stack_based_vec::ArrayVec;
@@ -99,7 +100,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
         self.data.as_mut_ptr() as *mut _
     }
 
-    /// * Example
+    /// # Example
     ///
     /// ```rust
     /// use stack_based_vec::ArrayVec;
@@ -111,7 +112,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
         unsafe { slice::from_raw_parts_mut(self.as_mut_ptr(), self.len()) }
     }
 
-    /// * Example
+    /// # Example
     ///
     /// ```rust
     /// use stack_based_vec::ArrayVec;
@@ -130,7 +131,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
         self.data.as_ptr() as *const _
     }
 
-    /// * Example
+    /// # Example
     ///
     /// ```rust
     /// use stack_based_vec::ArrayVec;
@@ -142,7 +143,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
         unsafe { slice::from_raw_parts(self.as_ptr(), self.len()) }
     }
 
-    /// * Example
+    /// # Example
     ///
     /// ```rust
     /// use stack_based_vec::ArrayVec;
@@ -154,7 +155,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
         N
     }
 
-    /// * Example
+    /// # Example
     ///
     /// ```rust
     /// use stack_based_vec::ArrayVec;
@@ -167,7 +168,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
         self.truncate(0)
     }
 
-    /// * Example
+    /// # Example
     ///
     /// ```rust
     /// use stack_based_vec::ArrayVec;
@@ -182,7 +183,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
         self.dedup_by(|a, b| a == b)
     }
 
-    /// * Example
+    /// # Example
     ///
     /// ```rust
     /// use stack_based_vec::ArrayVec;
@@ -201,7 +202,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
         self.truncate(len);
     }
 
-    /// * Example
+    /// # Example
     ///
     /// ```rust
     /// use stack_based_vec::ArrayVec;
@@ -219,7 +220,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
         self.dedup_by(|a, b| key(a) == key(b))
     }
 
-    /// * Example
+    /// # Example
     ///
     /// ```rust
     /// use stack_based_vec::ArrayVec;
@@ -268,7 +269,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
         }
     }
 
-    /// * Examples
+    /// # Examples
     ///
     /// ```rust
     /// use stack_based_vec::ArrayVec;
@@ -302,7 +303,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
         }
     }
 
-    /// * Examples
+    /// # Examples
     ///
     /// ```rust
     /// use stack_based_vec::ArrayVec;
@@ -336,7 +337,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
         }
     }
 
-    /// * Example
+    /// # Example
     ///
     /// ```rust
     /// use stack_based_vec::ArrayVec;
@@ -363,7 +364,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
         Ok(())
     }
 
-    /// * Example
+    /// # Example
     ///
     /// ```rust
     /// use stack_based_vec::ArrayVec;
@@ -377,7 +378,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
         self.len == 0
     }
 
-    /// * Example
+    /// # Example
     ///
     /// ```rust
     /// use stack_based_vec::ArrayVec;
@@ -408,7 +409,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
         }
     }
 
-    /// * Example
+    /// # Example
     ///
     /// ```rust
     /// use stack_based_vec::ArrayVec;
@@ -555,7 +556,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
         }
     }
 
-    /// * Example
+    /// # Example
     ///
     /// ```rust
     /// use stack_based_vec::ArrayVec;
