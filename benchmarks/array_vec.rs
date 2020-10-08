@@ -1,6 +1,6 @@
 #![feature(array_map, min_const_generics)]
 
-use criterion::{criterion_group, BenchmarkGroup, criterion_main, Criterion, BenchmarkId, measurement::Measurement};
+use criterion::{black_box, criterion_group, BenchmarkGroup, criterion_main, Criterion, BenchmarkId, measurement::Measurement};
 use stack_based_vec::ArrayVec;
 
 fn extend_from_copyable_slice<M, const N: usize>(group: &mut BenchmarkGroup<'_, M>)
@@ -14,7 +14,7 @@ where
             idx += 1;
             idx
         });
-        let _ = v.extend_from_copyable_slice(&array[..]);
+        let _ = v.extend_from_copyable_slice(black_box(&array[..]));
     }));
 
     group.bench_with_input(BenchmarkId::new("Vec::new", N), &N, |b, _| b.iter(|| {
@@ -24,7 +24,7 @@ where
             idx += 1;
             idx
         });
-        v.extend(&array[..]);
+        v.extend(black_box(&array[..]));
     }));
 
     group.bench_with_input(BenchmarkId::new("Vec::with_capacity", N), &N, |b, _| b.iter(|| {
@@ -34,7 +34,7 @@ where
             idx += 1;
             idx
         });
-        v.extend(&array[..]);
+        v.extend(black_box(&array[..]));
     }));
 }
 
@@ -45,21 +45,21 @@ where
     group.bench_with_input(BenchmarkId::new("ArrayVec::new", N), &N, |b, _| b.iter(|| {
         let mut v: ArrayVec<usize, N> = ArrayVec::new();
         for elem in 0..N {
-            let _ = v.push(elem);
+            let _ = v.push(black_box(elem));
         }
     }));
 
     group.bench_with_input(BenchmarkId::new("Vec::new", N), &N, |b, _| b.iter(|| {
         let mut v: Vec<usize> = Vec::new();
         for elem in 0..N {
-            v.push(elem);
+            v.push(black_box(elem));
         }
     }));
 
     group.bench_with_input(BenchmarkId::new("Vec::with_capacity", N), &N, |b, _| b.iter(|| {
         let mut v: Vec<usize> = Vec::with_capacity(N);
         for elem in 0..N {
-            v.push(elem);
+            v.push(black_box(elem));
         }
     }));
 }

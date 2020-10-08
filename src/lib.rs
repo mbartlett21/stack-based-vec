@@ -326,7 +326,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
         let mut f = |len| unsafe {
             let dst = self.as_mut_ptr().add(self.len());
             ptr::copy_nonoverlapping(other.as_ptr(), dst, len);
-            self.increase_len(len);
+            self.set_len(self.len + 1);
         };
         if other.len() > remaining_capacity {
             f(remaining_capacity);
@@ -422,13 +422,14 @@ impl<T, const N: usize> ArrayVec<T, N> {
     /// ```
     #[inline]
     pub fn push(&mut self, element: T) -> Result<(), T> {
-        if self.len >= N {
+        let len = self.len;
+        if len >= N {
             return Err(element);
         }
         unsafe {
-            ptr::write(self.as_mut_ptr().add(self.len), element);
+            ptr::write(self.as_mut_ptr().add(len), element);
+            self.set_len(len + 1);
         }
-        self.increase_len(1);
         Ok(())
     }
 
@@ -586,6 +587,11 @@ impl<T, const N: usize> ArrayVec<T, N> {
     #[inline]
     const fn remaining_capacity(&self) -> usize {
         self.capacity().saturating_sub(self.len())
+    }
+
+    #[inline]
+    unsafe fn set_len(&mut self, len: usize) {
+        self.len = len;
     }
 }
 

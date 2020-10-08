@@ -15,4 +15,4 @@ publish = false
 edition = "2018"
 
 [workspace]
-members = ["."]
+

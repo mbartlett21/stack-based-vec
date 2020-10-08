@@ -1,6 +1,6 @@
 [[bin]]
 name = "array-vec"
-path = "fuzz_targets/array_vec.rs"
+path = "array_vec.rs"
 test = false
 doc = false
 
@@ -20,5 +20,5 @@ edition = "2018"
 cargo-fuzz = true
 
 [workspace]
-members = ["."]
+
 
