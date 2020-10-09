@@ -8,7 +8,7 @@ where
     M: Measurement
 {
     group.bench_with_input(BenchmarkId::new("ArrayVec::new", N), &N, |b, _| b.iter(|| {
-        let mut v: ArrayVec<usize, N> = ArrayVec::new();
+        let mut v = ArrayVec::<usize, N>::new();
         let mut idx = 0;
         let array: [usize; N] = [(); N].map(|_| {
             idx += 1;
@@ -43,7 +43,7 @@ where
     M: Measurement
 {
     group.bench_with_input(BenchmarkId::new("ArrayVec::new", N), &N, |b, _| b.iter(|| {
-        let mut v: ArrayVec<usize, N> = ArrayVec::new();
+        let mut v = ArrayVec::<usize, N>::new();
         for elem in 0..N {
             let _ = v.push(black_box(elem));
         }
@@ -74,11 +74,11 @@ macro_rules! add_benchmark {
 
 fn criterion_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("extend_from_copyable_slice");
-    add_benchmark!([10, 1000, 100000], extend_from_copyable_slice, group);
+    add_benchmark!([5000], extend_from_copyable_slice, group);
     group.finish();
 
     let mut group = c.benchmark_group("push");
-    add_benchmark!([10, 1000, 100000], push, group);
+    add_benchmark!([5000], push, group);
     group.finish();
 }
 

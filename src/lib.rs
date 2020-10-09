@@ -1,4 +1,6 @@
 #![feature(
+    const_mut_refs,
+    const_maybe_uninit_as_ptr,
     exact_size_is_empty,
     min_const_generics,
     slice_partition_dedup,
@@ -38,9 +40,9 @@ impl<T, const N: usize> ArrayVec<T, N> {
     /// assert_eq!(v.len(), 2);
     /// ```
     #[inline]
-    pub fn from_array(array: [T; N]) -> Self {
+    pub const fn from_array(array: [T; N]) -> Self {
         Self {
-            len: array.len(),
+            len: N,
             data: MaybeUninit::new(array),
         }
     }
@@ -54,10 +56,15 @@ impl<T, const N: usize> ArrayVec<T, N> {
     /// assert_eq!(v.len(), 1);
     /// ```
     #[inline]
-    pub fn from_array_and_len(array: [T; N], len: usize) -> Self {
+    pub const fn from_array_and_len(array: [T; N], len: usize) -> Self {
         Self {
-            len: len.min(array.len()),
             data: MaybeUninit::new(array),
+            len: if len < N {
+                len
+            }
+            else {
+                N
+            },
         }
     }
 
@@ -96,7 +103,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
     /// assert_eq!(v.as_slice(), &[0, 1]);
     /// ```
     #[inline]
-    pub fn as_mut_ptr(&mut self) -> *mut T {
+    pub const fn as_mut_ptr(&mut self) -> *mut T {
         self.data.as_mut_ptr() as *mut _
     }
 
@@ -127,7 +134,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
     /// }
     /// ```
     #[inline]
-    pub fn as_ptr(&self) -> *const T {
+    pub const fn as_ptr(&self) -> *const T {
         self.data.as_ptr() as *const _
     }
 
@@ -164,7 +171,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
     /// assert_eq!(v.len(), 0);
     /// ```
     #[inline]
-    pub fn clear(&mut self) {
+    pub const fn clear(&mut self) {
         self.truncate(0)
     }
 
@@ -352,15 +359,16 @@ impl<T, const N: usize> ArrayVec<T, N> {
     /// assert!(v.insert(0, 6).is_err());
     /// ```
     pub fn insert(&mut self, idx: usize, element: T) -> Result<(), T> {
-        if idx > self.len() || self.remaining_capacity() == 0 {
+        let len = self.len();
+        if idx > len || self.remaining_capacity() == 0 {
             return Err(element);
         }
         unsafe {
             let ptr: *mut _ = self.as_mut_ptr().add(idx);
-            ptr::copy(ptr, ptr.add(1), self.len().saturating_sub(idx));
+            ptr::copy(ptr, ptr.add(1), len - 1);
             ptr::write(ptr, element);
+            self.set_len(len + 1);
         }
-        self.increase_len(1);
         Ok(())
     }
 
@@ -403,8 +411,10 @@ impl<T, const N: usize> ArrayVec<T, N> {
             None
         } else {
             unsafe {
-                self.decrease_len(1);
-                Some(ptr::read(self.as_ptr().add(self.len())))
+                let len = self.len() - 1;
+                let rslt = Some(ptr::read(self.as_ptr().add(len)));
+                self.set_len(len);
+                rslt
             }
         }
     }
@@ -449,10 +459,10 @@ impl<T, const N: usize> ArrayVec<T, N> {
         }
         unsafe {
             let ptr = self.as_mut_ptr().add(idx);
-            let ret = ptr::read(ptr);
+            let rslt = ptr::read(ptr);
             ptr::copy(ptr.offset(1), ptr, len - idx - 1);
-            self.decrease_len(1);
-            Some(ret)
+            self.set_len(len - 1);
+            Some(rslt)
         }
     }
 
@@ -552,7 +562,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
         unsafe {
             let last = ptr::read(self.as_ptr().add(len - 1));
             let hole = self.as_mut_ptr().add(idx);
-            self.decrease_len(1);
+            self.set_len(len - 1);
             Some(ptr::replace(hole, last))
         }
     }
@@ -565,32 +575,19 @@ impl<T, const N: usize> ArrayVec<T, N> {
     /// v.truncate(1);
     /// assert_eq!(v.len(), 1);
     /// ```
-    pub fn truncate(&mut self, len: usize) {
-        unsafe {
-            if len < self.len() {
-                ptr::drop_in_place(&mut self[len..]);
-                self.len = len;
-            }
+    pub const fn truncate(&mut self, len: usize) {
+        if len < self.len() {
+            self.len = len;
         }
     }
 
     #[inline]
-    fn decrease_len(&mut self, n: usize) {
-        self.len = self.len.saturating_sub(n);
-    }
-
-    #[inline]
-    fn increase_len(&mut self, n: usize) {
-        self.len = self.len.saturating_add(n);
-    }
-
-    #[inline]
     const fn remaining_capacity(&self) -> usize {
-        self.capacity().saturating_sub(self.len())
+        self.capacity() - self.len
     }
 
     #[inline]
-    unsafe fn set_len(&mut self, len: usize) {
+    const unsafe fn set_len(&mut self, len: usize) {
         self.len = len;
     }
 }
