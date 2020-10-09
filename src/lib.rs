@@ -442,7 +442,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
             return Err(element);
         }
         unsafe {
-            ptr::write(self.as_mut_ptr().add(len), element);
+            self.as_mut_ptr().add(len).write(element);
             self.set_len(len + 1);
         }
         Ok(())

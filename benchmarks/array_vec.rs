@@ -1,73 +1,111 @@
 #![feature(array_map, min_const_generics)]
 
 use criterion::{black_box, criterion_group, BenchmarkGroup, criterion_main, Criterion, BenchmarkId, measurement::Measurement};
-use stack_based_vec::ArrayVec;
 
-fn extend_from_copyable_slice<M, const N: usize>(group: &mut BenchmarkGroup<'_, M>)
-where
-    M: Measurement
-{
-    group.bench_with_input(BenchmarkId::new("ArrayVec::new", N), &N, |b, _| b.iter(|| {
-        let mut v = ArrayVec::<usize, N>::new();
-        let array = ascending_array::<N>();
-        let _ = v.extend_from_copyable_slice(black_box(&array[..]));
-    }));
-
-    group.bench_with_input(BenchmarkId::new("Vec::new", N), &N, |b, _| b.iter(|| {
-        let mut v: Vec<usize> = Vec::new();
-        let array = ascending_array::<N>();
-        v.extend(black_box(&array[..]));
-    }));
-
-    group.bench_with_input(BenchmarkId::new("Vec::with_capacity", N), &N, |b, _| b.iter(|| {
-        let mut v: Vec<usize> = Vec::with_capacity(N);
-        let array = ascending_array::<N>();
-        v.extend(black_box(&array[..]));
-    }));
-}
-
-fn push<M, const N: usize>(group: &mut BenchmarkGroup<'_, M>)
-where
-    M: Measurement
-{
-    group.bench_with_input(BenchmarkId::new("ArrayVec::new", N), &N, |b, _| b.iter(|| {
-        let mut v = ArrayVec::<usize, N>::new();
-        for elem in 0..N {
-            let _ = v.push(black_box(elem));
+macro_rules! add_benchmark_group {
+    (
+        $criterion:expr,
+        $f:ident,
+        [$($n:expr),+],
+        $static_vec:expr,
+        $vec:expr,
+        $vec_with_capacity:expr,
+        $std_array_vec:expr,
+        $tinyvec_array_vec:expr
+    ) => {
+        fn $f<M, const N: usize>(group: &mut BenchmarkGroup<'_, M>)
+        where
+            M: Measurement
+        {
+            group.bench_with_input(BenchmarkId::new("StaticVec", N), &N, |b, _| b.iter(|| {
+                let mut v = staticvec::StaticVec::<usize, N>::new();
+                $static_vec(&mut v);
+            }));
+            
+            group.bench_with_input(BenchmarkId::new("Vec", N), &N, |b, _| b.iter(|| {
+                let mut v: Vec<usize> = Vec::new();
+                $vec(&mut v);
+            }));
+            
+            group.bench_with_input(BenchmarkId::new("Vec::with_capacity", N), &N, |b, _| b.iter(|| {
+                let mut v: Vec<usize> = Vec::with_capacity(N);
+                $vec_with_capacity(&mut v);
+            }));
+            
+            group.bench_with_input(BenchmarkId::new("std::ArrayVec", N), &N, |b, _| b.iter(|| {
+                let mut v = stack_based_vec::ArrayVec::<usize, N>::new();
+                $std_array_vec(&mut v);
+            }));
+            
+            group.bench_with_input(BenchmarkId::new("tinyvec::ArrayVec", N), &N, |b, _| b.iter(|| {
+                let mut v = tinyvec::ArrayVec::<[usize; N]>::new();
+                $tinyvec_array_vec(&mut v);
+            }));
         }
-    }));
 
-    group.bench_with_input(BenchmarkId::new("Vec::new", N), &N, |b, _| b.iter(|| {
-        let mut v: Vec<usize> = Vec::new();
-        for elem in 0..N {
-            v.push(black_box(elem));
-        }
-    }));
-
-    group.bench_with_input(BenchmarkId::new("Vec::with_capacity", N), &N, |b, _| b.iter(|| {
-        let mut v: Vec<usize> = Vec::with_capacity(N);
-        for elem in 0..N {
-            v.push(black_box(elem));
-        }
-    }));
-}
-
-macro_rules! add_benchmark {
-    ([$($n:expr),+], $f:ident, $group:expr) => {
-        $(
-            $f::<_, $n>(&mut $group);
-        )+
+        let mut group = $criterion.benchmark_group(stringify!($f));
+        $( $f::<_, $n>(&mut group); )+
+        group.finish();
     };
 }
 
 fn criterion_benchmark(c: &mut Criterion) {
-    let mut group = c.benchmark_group("extend_from_copyable_slice");
-    add_benchmark!([10000], extend_from_copyable_slice, group);
-    group.finish();
+    add_benchmark_group!(
+        c,
+        extend_from_copyable_slice,
+        [99, 9999],
+        |v: &mut staticvec::StaticVec::<usize, N>| {
+            let array = ascending_array::<N>();
+            let _ = v.extend_from_slice(black_box(&array[..]));
+        },
+        |v: &mut Vec<usize>| {
+            let array = ascending_array::<N>();
+            v.extend(black_box(&array[..]));
+        },
+        |v: &mut Vec<usize>| {
+            let array = ascending_array::<N>();
+            v.extend(black_box(&array[..]));
+        },
+        |v: &mut stack_based_vec::ArrayVec::<usize, N>| {
+            let array = ascending_array::<N>();
+            let _ = v.extend_from_copyable_slice(black_box(&array[..]));
+        },
+        |v: &mut tinyvec::ArrayVec::<[usize; N]>| {
+            let array = ascending_array::<N>();
+            let _ = v.extend_from_slice(black_box(&array[..]));
+        }
+    );
 
-    let mut group = c.benchmark_group("push");
-    add_benchmark!([10000], push, group);
-    group.finish();
+    add_benchmark_group!(
+        c,
+        push,
+        [99, 9999],
+        |v: &mut staticvec::StaticVec::<usize, N>| {
+            for elem in 0..N {
+                let _ = v.try_push(black_box(elem));
+            }
+        },
+        |v: &mut Vec<usize>| {
+            for elem in 0..N {
+                v.push(black_box(elem));
+            }
+        },
+        |v: &mut Vec<usize>| {
+            for elem in 0..N {
+                v.push(black_box(elem));
+            }
+        },
+        |v: &mut stack_based_vec::ArrayVec::<usize, N>| {
+            for elem in 0..N {
+                let _ = v.push(black_box(elem));
+            }
+        },
+        |v: &mut tinyvec::ArrayVec::<[usize; N]>| {
+            for elem in 0..N {
+                let _ = v.try_push(black_box(elem));
+            }
+        }
+    );
 }
 
 criterion_group!(benches, criterion_benchmark);
