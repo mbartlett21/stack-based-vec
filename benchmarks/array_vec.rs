@@ -9,31 +9,19 @@ where
 {
     group.bench_with_input(BenchmarkId::new("ArrayVec::new", N), &N, |b, _| b.iter(|| {
         let mut v = ArrayVec::<usize, N>::new();
-        let mut idx = 0;
-        let array: [usize; N] = [(); N].map(|_| {
-            idx += 1;
-            idx
-        });
+        let array = ascending_array::<N>();
         let _ = v.extend_from_copyable_slice(black_box(&array[..]));
     }));
 
     group.bench_with_input(BenchmarkId::new("Vec::new", N), &N, |b, _| b.iter(|| {
         let mut v: Vec<usize> = Vec::new();
-        let mut idx = 0;
-        let array: [usize; N] = [(); N].map(|_| {
-            idx += 1;
-            idx
-        });
+        let array = ascending_array::<N>();
         v.extend(black_box(&array[..]));
     }));
 
     group.bench_with_input(BenchmarkId::new("Vec::with_capacity", N), &N, |b, _| b.iter(|| {
         let mut v: Vec<usize> = Vec::with_capacity(N);
-        let mut idx = 0;
-        let array: [usize; N] = [(); N].map(|_| {
-            idx += 1;
-            idx
-        });
+        let array = ascending_array::<N>();
         v.extend(black_box(&array[..]));
     }));
 }
@@ -74,13 +62,22 @@ macro_rules! add_benchmark {
 
 fn criterion_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("extend_from_copyable_slice");
-    add_benchmark!([5000], extend_from_copyable_slice, group);
+    add_benchmark!([10000], extend_from_copyable_slice, group);
     group.finish();
 
     let mut group = c.benchmark_group("push");
-    add_benchmark!([5000], push, group);
+    add_benchmark!([10000], push, group);
     group.finish();
 }
 
 criterion_group!(benches, criterion_benchmark);
 criterion_main!(benches);
+
+#[inline]
+fn ascending_array<const N: usize>() -> [usize; N] {
+    let mut idx = 0;
+    [(); N].map(|_| {
+        idx += 1;
+        idx
+    })
+}

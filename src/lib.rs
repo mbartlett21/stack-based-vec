@@ -59,12 +59,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
     pub const fn from_array_and_len(array: [T; N], len: usize) -> Self {
         Self {
             data: MaybeUninit::new(array),
-            len: if len < N {
-                len
-            }
-            else {
-                N
-            },
+            len: if len < N { len } else { N },
         }
     }
 
@@ -295,17 +290,18 @@ impl<T, const N: usize> ArrayVec<T, N> {
     where
         T: Clone,
     {
+        let other_len = other.len();
         let remaining_capacity = self.remaining_capacity();
         let mut f = |len| {
-            for element in other[..len].iter().cloned() {
+            for element in other[0..len].iter().cloned() {
                 let _ = self.push(element);
             }
         };
-        if other.len() > remaining_capacity {
+        if other_len > remaining_capacity {
             f(remaining_capacity);
             Err(&other[remaining_capacity..])
         } else {
-            f(other.len());
+            f(other_len);
             Ok(())
         }
     }
@@ -325,21 +321,28 @@ impl<T, const N: usize> ArrayVec<T, N> {
     /// assert_eq!(v.extend_from_copyable_slice(&[1, 2, 3]).unwrap_err(), &[3]);
     /// assert_eq!(v.as_slice(), &[1, 2]);
     /// ```
+    #[inline]
     pub fn extend_from_copyable_slice<'a>(&mut self, other: &'a [T]) -> Result<(), &'a [T]>
     where
         T: Copy,
     {
+        let other_len = other.len();
         let remaining_capacity = self.remaining_capacity();
-        let mut f = |len| unsafe {
-            let dst = self.as_mut_ptr().add(self.len());
-            ptr::copy_nonoverlapping(other.as_ptr(), dst, len);
-            self.set_len(self.len + 1);
-        };
-        if other.len() > remaining_capacity {
-            f(remaining_capacity);
+        let self_len = self.len();
+        macro_rules! do_copy {
+            ($additional_len:expr) => {
+                unsafe {
+                    let dst = self.as_mut_ptr().add(self_len);
+                    ptr::copy_nonoverlapping(other.as_ptr(), dst, $additional_len);
+                    self.set_len(self_len + $additional_len);
+                }
+            };
+        }
+        if other_len > remaining_capacity {
+            do_copy!(remaining_capacity);
             Err(&other[remaining_capacity..])
         } else {
-            f(other.len());
+            do_copy!(other_len);
             Ok(())
         }
     }
