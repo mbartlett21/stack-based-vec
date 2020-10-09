@@ -1,6 +1,8 @@
 #![feature(
-    const_mut_refs,
     const_maybe_uninit_as_ptr,
+    const_mut_refs,
+    const_raw_ptr_deref,
+    const_slice_from_raw_parts,
     exact_size_is_empty,
     min_const_generics,
     slice_partition_dedup,
@@ -42,8 +44,8 @@ impl<T, const N: usize> ArrayVec<T, N> {
     #[inline]
     pub const fn from_array(array: [T; N]) -> Self {
         Self {
-            len: N,
             data: MaybeUninit::new(array),
+            len: N,
         }
     }
 
@@ -110,8 +112,8 @@ impl<T, const N: usize> ArrayVec<T, N> {
     /// assert_eq!(v.as_mut_slice(), &mut [1, 2]);
     /// ```
     #[inline]
-    pub fn as_mut_slice(&mut self) -> &mut [T] {
-        unsafe { slice::from_raw_parts_mut(self.as_mut_ptr(), self.len()) }
+    pub const fn as_mut_slice(&mut self) -> &mut [T] {
+        unsafe { &mut *ptr::slice_from_raw_parts_mut(self.as_mut_ptr(), self.len) }
     }
 
     /// # Example
@@ -141,8 +143,8 @@ impl<T, const N: usize> ArrayVec<T, N> {
     /// assert_eq!(v.as_slice(), &[1, 2]);
     /// ```
     #[inline]
-    pub fn as_slice(&self) -> &[T] {
-        unsafe { slice::from_raw_parts(self.as_ptr(), self.len()) }
+    pub const fn as_slice(&self) -> &[T] {
+        unsafe { &*ptr::slice_from_raw_parts(self.as_ptr(), self.len) }
     }
 
     /// # Example
@@ -240,7 +242,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
     where
         R: RangeBounds<usize>,
     {
-        let len = self.len();
+        let len = self.len;
         let start = match range.start_bound() {
             Bound::Included(&n) => n,
             Bound::Excluded(&n) => n + 1,
@@ -328,7 +330,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
     {
         let other_len = other.len();
         let remaining_capacity = self.remaining_capacity();
-        let self_len = self.len();
+        let self_len = self.len;
         macro_rules! do_copy {
             ($additional_len:expr) => {
                 unsafe {
@@ -362,7 +364,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
     /// assert!(v.insert(0, 6).is_err());
     /// ```
     pub fn insert(&mut self, idx: usize, element: T) -> Result<(), T> {
-        let len = self.len();
+        let len = self.len;
         if idx > len || self.remaining_capacity() == 0 {
             return Err(element);
         }
@@ -414,7 +416,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
             None
         } else {
             unsafe {
-                let len = self.len() - 1;
+                let len = self.len - 1;
                 let rslt = Some(ptr::read(self.as_ptr().add(len)));
                 self.set_len(len);
                 rslt
@@ -456,7 +458,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
     /// assert_eq!(v.as_slice(), &[2, 3]);
     /// ```
     pub fn remove(&mut self, idx: usize) -> Option<T> {
-        let len = self.len();
+        let len = self.len;
         if idx >= len {
             return None;
         }
@@ -483,7 +485,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
     where
         F: FnMut(&mut T) -> bool,
     {
-        let len = self.len();
+        let len = self.len;
         let mut del = 0;
         {
             let v = &mut **self;
@@ -534,7 +536,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
     /// assert_eq!(v2.as_slice(), &[2, 3]);
     /// ```
     pub fn split_off(&mut self, at: usize) -> Option<Self> {
-        let len = self.len();
+        let len = self.len;
         if at > len {
             return None;
         }
@@ -558,7 +560,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
     /// assert_eq!(v.len(), 1);
     /// ```
     pub fn swap_remove(&mut self, idx: usize) -> Option<T> {
-        let len = self.len();
+        let len = self.len;
         if idx >= len {
             return None;
         }
@@ -578,8 +580,9 @@ impl<T, const N: usize> ArrayVec<T, N> {
     /// v.truncate(1);
     /// assert_eq!(v.len(), 1);
     /// ```
+    #[inline]
     pub const fn truncate(&mut self, len: usize) {
-        if len < self.len() {
+        if len < self.len {
             self.len = len;
         }
     }
