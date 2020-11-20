@@ -7,10 +7,7 @@ use core::{
     slice,
 };
 
-pub struct Drain<'a, T, const N: usize>
-where
-    T: 'a,
-{
+pub struct Drain<'a, T, const N: usize> {
     /// Current remaining range to remove
     pub(crate) iter: slice::Iter<'a, T>,
     /// Index of tail to preserve

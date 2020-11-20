@@ -1,4 +1,6 @@
+#![allow(trivial_casts, missing_docs)]
 #![feature(
+    const_fn,
     const_maybe_uninit_as_ptr,
     const_mut_refs,
     const_raw_ptr_deref,
@@ -168,7 +170,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
     /// assert_eq!(v.len(), 0);
     /// ```
     #[inline]
-    pub const fn clear(&mut self) {
+    pub fn clear(&mut self) {
         self.truncate(0)
     }
 
@@ -288,22 +290,25 @@ impl<T, const N: usize> ArrayVec<T, N> {
     /// assert_eq!(v.extend_from_cloneable_slice(&[1, 2, 3]).unwrap_err(), &[3]);
     /// assert_eq!(v.as_slice(), &[1, 2]);
     /// ```
+    #[inline]
     pub fn extend_from_cloneable_slice<'a>(&mut self, other: &'a [T]) -> Result<(), &'a [T]>
     where
         T: Clone,
     {
         let other_len = other.len();
         let remaining_capacity = self.remaining_capacity();
-        let mut f = |len| {
-            for element in other[0..len].iter().cloned() {
-                let _ = self.push(element);
-            }
-        };
+        macro_rules! do_clone {
+            ($additional_len:expr) => {
+                for elem in other[0..$additional_len].iter().cloned() {
+                    let _ = self.push(elem);
+                }
+            };
+        }
         if other_len > remaining_capacity {
-            f(remaining_capacity);
+            do_clone!(remaining_capacity);
             Err(&other[remaining_capacity..])
         } else {
-            f(other_len);
+            do_clone!(other_len);
             Ok(())
         }
     }
@@ -411,15 +416,15 @@ impl<T, const N: usize> ArrayVec<T, N> {
     /// assert_eq!(v.pop().unwrap(), 3);
     /// assert_eq!(v.as_slice(), &[1, 2]);
     /// ```
+    #[inline]
     pub fn pop(&mut self) -> Option<T> {
-        if self.len == 0 {
+        if self.is_empty() {
             None
         } else {
             unsafe {
                 let len = self.len - 1;
-                let rslt = Some(ptr::read(self.as_ptr().add(len)));
                 self.set_len(len);
-                rslt
+                Some(self.as_ptr().add(len).read())
             }
         }
     }
@@ -446,6 +451,19 @@ impl<T, const N: usize> ArrayVec<T, N> {
             self.set_len(len + 1);
         }
         Ok(())
+    }
+
+    #[inline]
+    pub const fn get(&self, idx: usize) -> Option<&T> {
+        let len = self.len;
+        if idx >= len {
+            return None;
+        }
+        unsafe {
+            let a: *mut [T; N] = self.as_ptr() as _;
+            let b: &mut [T; N] = &mut *a;
+            Some(&b[idx])
+        }
     }
 
     /// # Example
@@ -581,9 +599,16 @@ impl<T, const N: usize> ArrayVec<T, N> {
     /// assert_eq!(v.len(), 1);
     /// ```
     #[inline]
-    pub const fn truncate(&mut self, len: usize) {
-        if len < self.len {
-            self.len = len;
+    pub fn truncate(&mut self, len: usize) {
+        let remaining_len = if let Some(rslt) = self.len.checked_sub(len) {
+            rslt
+        } else {
+            return;
+        };
+        unsafe {
+            let slice = ptr::slice_from_raw_parts_mut(self.as_mut_ptr().add(len), remaining_len);
+            self.set_len(len);
+            ptr::drop_in_place(slice);
         }
     }
 
@@ -630,10 +655,16 @@ impl<T, const N: usize> Clone for ArrayVec<T, N>
 where
     T: Clone,
 {
+    #[inline]
     fn clone(&self) -> Self {
         let mut v = Self::new();
         let _ = v.extend_from_cloneable_slice(self.as_slice());
         v
+    }
+
+    #[inline]
+    fn clone_from(&mut self, source: &Self) {
+        let _ = self.extend_from_cloneable_slice(source.as_slice());
     }
 }
 
@@ -667,6 +698,7 @@ impl<T, const N: usize> DerefMut for ArrayVec<T, N> {
 impl<T, const N: usize> Eq for ArrayVec<T, N> where T: Eq {}
 
 impl<T, const N: usize> Extend<T> for ArrayVec<T, N> {
+    #[inline]
     fn extend<I>(&mut self, iter: I)
     where
         I: IntoIterator<Item = T>,
