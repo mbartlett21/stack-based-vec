@@ -453,19 +453,6 @@ impl<T, const N: usize> ArrayVec<T, N> {
         Ok(())
     }
 
-    #[inline]
-    pub const fn get(&self, idx: usize) -> Option<&T> {
-        let len = self.len;
-        if idx >= len {
-            return None;
-        }
-        unsafe {
-            let a: *mut [T; N] = self.as_ptr() as _;
-            let b: &mut [T; N] = &mut *a;
-            Some(&b[idx])
-        }
-    }
-
     /// # Example
     ///
     /// ```rust
