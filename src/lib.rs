@@ -6,7 +6,6 @@
     const_raw_ptr_deref,
     const_slice_from_raw_parts,
     exact_size_is_empty,
-    min_const_generics,
     slice_partition_dedup,
     trusted_len
 )]
