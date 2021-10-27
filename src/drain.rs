@@ -1,4 +1,3 @@
-use crate::ArrayVec;
 use core::{
     fmt,
     iter::{FusedIterator, TrustedLen},
@@ -6,6 +5,8 @@ use core::{
     ptr::{self, NonNull},
     slice,
 };
+
+use crate::ArrayVec;
 
 pub struct Drain<'a, T, const N: usize> {
     /// Current remaining range to remove
